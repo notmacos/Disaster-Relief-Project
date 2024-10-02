@@ -543,13 +543,147 @@
             }
         });
 
-        // Leaflet map initialization
+        // Add these new functions and variables at the beginning of the script
+        let userMarker;
+        let userLocation;
+
+        function requestLocationPermission() {
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'geolocation' }).then(function (result) {
+                    if (result.state === 'granted') {
+                        getAndDisplayLocation();
+                    } else if (result.state === 'prompt') {
+                        alert("Please allow location access to enhance your experience.");
+                        getAndDisplayLocation();
+                    } else if (result.state === 'denied') {
+                        alert("Location access is denied. Some features may not work correctly.");
+                    }
+                });
+            } else {
+                // Fallback for browsers that don't support the Permissions API
+                getAndDisplayLocation();
+            }
+        }
+
+        function getAndDisplayLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(showUserLocation, showError);
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        function showUserLocation(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            userLocation = [lat, lon];
+
+            // Center the map on the user's location
+            map.setView(userLocation, 13);
+
+            // Add a circular marker for the user's location
+            userMarker = L.circleMarker(userLocation, {
+                radius: 8,
+                fillColor: "#2ecc71",
+                color: "#2ecc71",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.3
+            }).addTo(map);
+
+            userMarker.bindPopup("You are here").openPopup();
+        }
+
+        // Modify the existing showError function
+        function showError(error) {
+            let errorMessage;
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Location access was denied. Some features may not work correctly.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "The request to get user location timed out.";
+                    break;
+                case error.UNKNOWN_ERROR:
+                    errorMessage = "An unknown error occurred while trying to get location.";
+                    break;
+            }
+            alert(errorMessage);
+        }
+
+        // Modify the Leaflet map initialization
         var map = L.map('map').setView([25.7617, -80.1918], 12);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 20
         }).addTo(map);
+
+        // Request location permission when the page loads
+        requestLocationPermission();
+
+        // Modify the triggerSOS function
+        function triggerSOS() {
+            if (userLocation) {
+                openSOSPopup();
+            } else {
+                alert("Unable to determine your location. Please ensure location access is enabled.");
+            }
+        }
+
+        // Modify the openSOSPopup function
+        function openSOSPopup() {
+            const sosPopupHTML = `
+                <div id="sosPopup" class="popup-overlay" style="display: block;">
+                    <div class="popup-content">
+                        <span class="close-popup" onclick="closeSOSPopup()">&times;</span>
+                        <h3>SOS Emergency Alert</h3>
+                        <form id="sosForm" onsubmit="submitSOS(event)">
+                            <div id="sosLocationMap" style="width: 100%; height: 200px;"></div>
+                            <input type="hidden" id="sosLocation" value="${userLocation.join(',')}">
+                            <select id="sosEventType" required>
+                                <option value="">Select Event Type</option>
+                                <option value="0">Recovery</option>
+                                <option value="1">Supply</option>
+                                <option value="2">Medical</option>
+                                <option value="3">Rubble Removal</option>
+                                <option value="4">Search and Rescue</option>
+                                <option value="5">Temp Shelter</option>
+                            </select>
+                            <textarea id="sosDescription" placeholder="Description" required></textarea>
+                            <input type="text" id="sosName" placeholder="Your Name" required>
+                            <button type="submit">Submit SOS</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', sosPopupHTML);
+            initSOSMap();
+        }
+
+        function initSOSMap() {
+            sosMap = L.map('sosLocationMap').setView(userLocation, 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(sosMap);
+
+            sosMarker = L.marker(userLocation, {
+                draggable: true
+            }).addTo(sosMap);
+
+            sosMarker.on('dragend', function(e) {
+                updateSOSLocation(e.target.getLatLng());
+            });
+        }
+
+        function updateSOSLocation(latlng) {
+            document.getElementById('sosLocation').value = `${latlng.lat},${latlng.lng}`;
+        }
 
         function openPopup(title, subtitle, description) {
             document.getElementById('popupTitle').textContent = title;
@@ -642,103 +776,10 @@
             window.location.reload();
         }
 
-        function triggerSOS() {
-            openSOSPopup();
-        }
-
-        function openSOSPopup() {
-            const sosPopupHTML = `
-                <div id="sosPopup" class="popup-overlay" style="display: block;">
-                    <div class="popup-content">
-                        <span class="close-popup" onclick="closeSOSPopup()">&times;</span>
-                        <h3>SOS Emergency Alert</h3>
-                        <form id="sosForm" onsubmit="submitSOS(event)">
-                            <div id="sosLocationMap" style="width: 100%; height: 200px;"></div>
-                            <input type="hidden" id="sosLocation">
-                            <select id="sosEventType" required>
-                                <option value="">Select Event Type</option>
-                                <option value="0">Recovery</option>
-                                <option value="1">Supply</option>
-                                <option value="2">Medical</option>
-                                <option value="3">Rubble Removal</option>
-                                <option value="4">Search and Rescue</option>
-                                <option value="5">Temp Shelter</option>
-                            </select>
-                            <textarea id="sosDescription" placeholder="Description" required></textarea>
-                            <input type="text" id="sosName" placeholder="Your Name" required>
-                            <button type="submit">Submit SOS</button>
-                        </form>
-                    </div>
-                </div>
-            `;
-            document.body.insertAdjacentHTML('beforeend', sosPopupHTML);
-            getLocation();
-        }
-
         function closeSOSPopup() {
             const sosPopup = document.getElementById('sosPopup');
             if (sosPopup) {
                 sosPopup.remove();
-            }
-        }
-
-        let sosMap, sosMarker;
-
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition, showError);
-            } else {
-                alert("Geolocation is not supported by this browser.");
-            }
-        }
-
-        function showPosition(position) {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            document.getElementById('sosLocation').value = `${lat},${lon}`;
-
-            sosMap = L.map('sosLocationMap').setView([lat, lon], 13);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(sosMap);
-
-            sosMarker = L.circle([lat, lon], {
-                color: 'red',
-                fillColor: '#f03',
-                fillOpacity: 0.5,
-                radius: 500
-            }).addTo(sosMap);
-
-            sosMap.on('click', function(e) {
-                updateMarkerPosition(e.latlng);
-            });
-        }
-
-        function updateMarkerPosition(latlng) {
-            sosMarker.setLatLng(latlng);
-            sosMap.setView(latlng);
-            document.getElementById('sosLocation').value = `${latlng.lat},${latlng.lng}`;
-        }
-
-        function showError(error) {
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    // Add a delay before showing the alert
-                    setTimeout(() => {
-                        alert("User denied the request for Geolocation.");
-                    }, 5000); // 5000 milliseconds = 5 seconds
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    alert("Location information is unavailable.");
-                    break;
-                case error.TIMEOUT:
-                    alert("The request to get user location timed out.");
-                    break;
-                case error.UNKNOWN_ERROR:
-                    alert("An unknown error occurred.");
-                    break;
             }
         }
 

@@ -4,11 +4,10 @@
 node server.js &
 
 # Run Sqlite server
-node SQL-Interaction/sql-interact.js &
+node sql/sql-interact.js &
 
 # Run Go program
-cd go-chat-test
-go run main.go &
+go run go-src/chat.go &
 
 # Wait for both processes to finish
 wait
