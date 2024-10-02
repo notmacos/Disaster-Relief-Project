@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export API_KEY="AIzaSyB9ZQZ4K9qd_r6Xjm2FZ69RYjbusagiwmQ"
+export API_KEY="gemini_key"
 
 # Pass all command-line arguments to gemini.go
 go run gemini.go "$@"
