@@ -390,6 +390,12 @@
             font-size: 18px;
             font-weight: 600;
         }
+        #charCount {
+            font-size: 12px;
+            color: #888;
+            text-align: right;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -455,9 +461,11 @@
             <h2>Regional Chat</h2>
             <div id="chat"></div>
             <div id="inputArea">
-                <input type="text" id="message" placeholder="Type a message">
-                <button onclick="sendMessage()">Send</button>
+                <input type="text" id="message" placeholder="Type a message (max 84 characters)">
+                <button id="sendButton" onclick="sendMessage()">Send</button>
             </div>
+            <div id="charCount">84 characters remaining</div>
+            <div id="cooldownTimer"></div>
         </div>
     </div>
 
@@ -524,23 +532,86 @@
             chat.scrollTop = chat.scrollHeight;
         };
 
+        let cooldownActive = false;
+        const cooldownDuration = 5; // 5 seconds cooldown
+
+        function startCooldown() {
+            cooldownActive = true;
+            const sendButton = document.getElementById("sendButton");
+            sendButton.disabled = true;
+            let timeLeft = cooldownDuration;
+
+            const cooldownTimer = document.getElementById("cooldownTimer");
+            cooldownTimer.textContent = `Wait ${timeLeft}s to send again`;
+
+            const countdownInterval = setInterval(() => {
+                timeLeft--;
+                cooldownTimer.textContent = `Wait ${timeLeft}s to send again`;
+
+                if (timeLeft <= 0) {
+                    clearInterval(countdownInterval);
+                    cooldownActive = false;
+                    sendButton.disabled = false;
+                    cooldownTimer.textContent = "";
+                }
+            }, 1000);
+        }
+
         function sendMessage() {
-            const message = document.getElementById("message").value.trim();
+            if (cooldownActive) return;
+
+            const messageInput = document.getElementById("message");
+            const message = messageInput.value.trim();
             const username = document.getElementById("profileName").value.trim() || "Anonymous";
-            if (message) {
+            
+            const allowedPattern = /^[a-zA-Z0-9\s.,!?'"()\-:;]+$/;
+            
+            if (message && allowedPattern.test(message) && message.length <= 84) {
                 ws.send(JSON.stringify({ username, content: message }));
-                document.getElementById("message").value = '';
+                messageInput.value = '';
+                updateCharCount(messageInput);
+                startCooldown();
+            } else if (message.length > 84) {
+                alert("Message is too long. Please limit your message to 84 characters.");
             } else {
-                alert("Please enter a message before sending.");
+                alert("Please enter a valid message. Only alphanumeric characters, spaces, and common punctuation are allowed.");
             }
         }
 
-        // Add event listener for Enter key press
+        // Modify the event listener for the message input
         document.getElementById("message").addEventListener("keypress", function(event) {
             if (event.key === "Enter") {
                 event.preventDefault();
-                sendMessage();
+                if (!cooldownActive) {
+                    sendMessage();
+                }
             }
+        });
+
+        // Modify the validateMessageInput function
+        function validateMessageInput(input) {
+            const allowedPattern = /^[a-zA-Z0-9\s.,!?'"()\-:;]*$/;
+            if (!allowedPattern.test(input.value)) {
+                input.value = input.value.replace(/[^a-zA-Z0-9\s.,!?'"()\-:;]/g, '');
+            }
+            // Truncate the input if it exceeds 84 characters
+            if (input.value.length > 84) {
+                input.value = input.value.slice(0, 84);
+            }
+            // Update character count display
+            updateCharCount(input);
+        }
+
+        // Add this new function to update the character count display
+        function updateCharCount(input) {
+            const charCount = document.getElementById("charCount");
+            const remainingChars = 84 - input.value.length;
+            charCount.textContent = `${remainingChars} characters remaining`;
+        }
+
+        // Add an event listener to validate input and update char count as the user types
+        document.getElementById("message").addEventListener("input", function(event) {
+            validateMessageInput(this);
         });
 
         // Add these new functions and variables at the beginning of the script

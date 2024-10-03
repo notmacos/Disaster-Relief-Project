@@ -3,7 +3,7 @@
 export API_KEY="gemini_key"
 
 # Pass all command-line arguments to gemini.go
-go run gemini.go "$@"
+go run -mod=mod go-src/gemini.go "$@"
 
 # Capture the exit status
 exit_status=$?

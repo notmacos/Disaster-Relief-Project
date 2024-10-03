@@ -5,7 +5,10 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -28,6 +31,11 @@ type Message struct {
 	Content  string `json:"content"`
 	IP       string `json:"ip"` // Adding IP to the message structure
 }
+
+var (
+	lastMessageTime = make(map[string]time.Time)
+	rateLimitMutex  sync.Mutex
+)
 
 func main() {
 	http.HandleFunc("/ws", handleConnections)
@@ -52,6 +60,9 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	clients[ws] = true
 
+	// Define a regular expression for allowed characters
+	allowedChars := regexp.MustCompile(`^[a-zA-Z0-9\s.,!?'"()\-:;]+$`)
+
 	for {
 		var msg Message
 		err := ws.ReadJSON(&msg)
@@ -59,6 +70,29 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error: %v", err)
 			delete(clients, ws)
 			break
+		}
+
+		// Rate limiting
+		rateLimitMutex.Lock()
+		lastTime, exists := lastMessageTime[clientIP]
+		if exists && time.Since(lastTime) < 5*time.Second {
+			rateLimitMutex.Unlock()
+			log.Printf("Rate limited message from %s (IP: %s)", msg.Username, clientIP)
+			continue // Skip this message and wait for the next one
+		}
+		lastMessageTime[clientIP] = time.Now()
+		rateLimitMutex.Unlock()
+
+		// Check if the message content exceeds the character limit
+		if len(msg.Content) > 84 {
+			log.Printf("Ignored message exceeding character limit from %s (IP: %s)", msg.Username, clientIP)
+			continue // Skip this message and wait for the next one
+		}
+
+		// Check if the message content contains only allowed characters
+		if !allowedChars.MatchString(msg.Content) {
+			log.Printf("Ignored message with invalid characters from %s (IP: %s)", msg.Username, clientIP)
+			continue // Skip this message and wait for the next one
 		}
 
 		// Set the IP address of the sender
