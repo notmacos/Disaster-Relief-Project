@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -30,6 +32,14 @@ type Message struct {
 	Username string `json:"username"`
 	Content  string `json:"content"`
 	IP       string `json:"ip"` // Adding IP to the message structure
+}
+
+// LoggedMessage defines the structure for logged messages
+type LoggedMessage struct {
+	Username   string    `json:"username"`
+	IP         string    `json:"ip"`
+	Content    string    `json:"content"`
+	TimeSentNY time.Time `json:"time_sent_ny"`
 }
 
 var (
@@ -98,6 +108,21 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		// Set the IP address of the sender
 		msg.IP = clientIP
 
+		// Get current time in New York timezone
+		nyLoc, _ := time.LoadLocation("America/New_York")
+		nyTime := time.Now().In(nyLoc)
+
+		// Create a LoggedMessage
+		loggedMsg := LoggedMessage{
+			Username:   msg.Username,
+			IP:         msg.IP,
+			Content:    msg.Content,
+			TimeSentNY: nyTime,
+		}
+
+		// Log the message to JSON file
+		go logMessageToJSON(loggedMsg)
+
 		// Append special tags for specific usernames
 		switch msg.Username {
 		case "Mike", "Mark":
@@ -115,6 +140,31 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		// Send the message to the broadcast channel
 		broadcast <- msg
+	}
+}
+
+func logMessageToJSON(msg LoggedMessage) {
+	// Create logs directory if it doesn't exist
+	err := os.MkdirAll("logs", os.ModePerm)
+	if err != nil {
+		log.Printf("Error creating logs directory: %v", err)
+		return
+	}
+
+	// Create or open the JSON file for today's date
+	fileName := fmt.Sprintf("logs/%s.json", msg.TimeSentNY.Format("2006-01-02"))
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Error opening log file: %v", err)
+		return
+	}
+	defer file.Close()
+
+	// Encode the message as JSON
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(msg)
+	if err != nil {
+		log.Printf("Error encoding message to JSON: %v", err)
 	}
 }
 
