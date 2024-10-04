@@ -7,7 +7,7 @@ node server.js &
 node sql/sql-interact.js &
 
 # Run Go program
-go run go-src/chat.go &
+cd go-src && go run . &
 
-# Wait for both processes to finish
+# Wait for all processes to finish
 wait

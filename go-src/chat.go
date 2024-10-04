@@ -6,11 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
+
+	"chat/gemini"
 
 	"github.com/gorilla/websocket"
 )
@@ -39,6 +39,8 @@ type LoggedMessage struct {
 	Username   string    `json:"username"`
 	IP         string    `json:"ip"`
 	Content    string    `json:"content"`
+	AIResponse string    `json:"ai_response"`
+	System     string    `json:"system"`
 	TimeSentNY time.Time `json:"time_sent_ny"`
 }
 
@@ -117,6 +119,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			Username:   msg.Username,
 			IP:         msg.IP,
 			Content:    msg.Content,
+			AIResponse: "", // Initialize AIResponse as empty string
+			System:     "",
 			TimeSentNY: nyTime,
 		}
 
@@ -173,16 +177,34 @@ func handleMessages() {
 	for {
 		msg := <-broadcast
 
-		// Execute launcher.sh with the message content
-		cmd := exec.Command("./launcher.sh", "message", msg.Content)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("Error executing launcher.sh: %v", err)
-			msg.Content = "[message restricted]"
-		} else {
-			// Trim any whitespace from the output and update the message content
-			msg.Content = strings.TrimSpace(string(output))
+		// Use the gemini package to check the message
+		aiResponse, err := gemini.CheckMessage(msg.Content)
+
+		// Get current time in New York timezone
+		nyLoc, _ := time.LoadLocation("America/New_York")
+		nyTime := time.Now().In(nyLoc)
+
+		// Create a LoggedMessage with both user message and AI response
+		loggedMsg := LoggedMessage{
+			Username:   msg.Username,
+			IP:         msg.IP,
+			Content:    msg.Content,
+			AIResponse: aiResponse,
+			System:     "",
+			TimeSentNY: nyTime,
 		}
+
+		if err != nil {
+			loggedMsg.System = err.Error()
+			log.Printf("Error processing message: %v", err)
+			aiResponse = "[Message Processing Error]"
+		}
+
+		// Log the message to JSON file
+		go logMessageToJSON(loggedMsg)
+
+		// Update the message content with the AI response for broadcasting
+		msg.Content = aiResponse
 
 		// Broadcast the updated message to all clients
 		for client := range clients {

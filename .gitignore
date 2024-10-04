@@ -4,6 +4,9 @@
 # Ignore a file containing sensitive information (e.g., API keys)
 keys.txt
 
+# Ignore modified launcher.sh
+go-src/gemini/launcher.sh   
+
 # Ignore all files in the logs directory within the go-src folder
 go-src/logs/*
 

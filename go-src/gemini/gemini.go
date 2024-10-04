@@ -12,6 +12,8 @@ import (
 	"google.golang.org/api/option"
 )
 
+const apiKey = "key_1"
+
 // RunGemini is the new entry point for this package
 func RunGemini() error {
 	if len(os.Args) < 2 {
@@ -32,7 +34,11 @@ func handleMessage() error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: go run eventRecommendations.go message <message>")
 	}
-	result := checkMessage(os.Args[2])
+	result, err := CheckMessage(os.Args[2])
+	if err != nil {
+		fmt.Println("Error:", err)
+		return err
+	}
 	fmt.Println(result)
 	return nil
 }
@@ -99,13 +105,12 @@ func generateRecommendations(dataPoints map[string]string, userType string) {
 	}
 }
 
-func checkMessage(message string) string {
+func CheckMessage(message string) (string, error) {
 	ctx := context.Background()
 
-	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("API_KEY")))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
-		log.Printf("Failed to create client: %v", err)
-		return "[Message Censored]"
+		return "", fmt.Errorf("failed to create client: %v", err)
 	}
 	defer client.Close()
 
@@ -143,25 +148,35 @@ Message to review: ` + message
 	response, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		log.Printf("Failed to generate content: %v", err)
-		return "[Message Censored]"
+		return "", fmt.Errorf("failed to process message")
 	}
 
 	if len(response.Candidates) > 0 && len(response.Candidates[0].Content.Parts) > 0 {
 		if part, ok := response.Candidates[0].Content.Parts[0].(genai.Text); ok {
+			// Log the raw response for debugging
+			log.Printf("Raw AI response: %s", string(part))
+
+			// Remove code block markers if present
+			cleanedResponse := strings.TrimSpace(string(part))
+			cleanedResponse = strings.TrimPrefix(cleanedResponse, "```json")
+			cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
+			cleanedResponse = strings.TrimSpace(cleanedResponse)
+
 			// Parse the JSON response
 			var result map[string]interface{}
-			if err := json.Unmarshal([]byte(part), &result); err != nil {
+			if err := json.Unmarshal([]byte(cleanedResponse), &result); err != nil {
 				log.Printf("Failed to parse JSON response: %v", err)
-				return "[Message Censored]"
+				log.Printf("Cleaned response causing the error: %s", cleanedResponse)
+				return "", fmt.Errorf("failed to process message")
 			}
 
 			if safe, ok := result["safe"].(bool); ok && safe {
-				return result["message"].(string)
+				return result["message"].(string), nil
 			} else if reason, ok := result["reason"].(string); ok {
-				return fmt.Sprintf("[Message Censored: %s]", reason)
+				return fmt.Sprintf("[Message Censored: %s]", reason), nil
 			}
 		}
 	}
 
-	return "[Message Censored]"
+	return "", fmt.Errorf("failed to process message")
 }
