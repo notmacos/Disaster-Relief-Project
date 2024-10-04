@@ -8,8 +8,9 @@ keys.txt
 go-src/gemini/launcher.sh   
 
 # Ignore all files in the logs directory within the go-src folder
-go-src/logs/*
+/go-src/logs/*
 
 # Ignore SQLite database files
-sql/users.db
-sql/events.db
+/sql/users.db
+/sql/events.db
+
